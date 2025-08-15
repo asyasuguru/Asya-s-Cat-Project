@@ -21,13 +21,10 @@ Built using the [CATAAS API](https://cataas.com/) with a mobile-friendly, Tinder
    ```bash
    git clone https://github.com/<your-username>/<your-repo-name>.git
 
-   <img width="675" height="341" alt="image" src="https://github.com/user-attachments/assets/a254e9ba-d474-41f6-823d-a4643be6a6cf" />
-
 ## 🚀 Step 3: At the terminal for the path
 
 1. **npx serve**
    ```bash
    Open it directly in a browser - use the local link.
-
 
 ## Enjoy the swiping match for date! Ops i mean cat 🫡🤣
