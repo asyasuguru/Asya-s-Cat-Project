@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paws & Preferences 🐾 — Find Your Favourite Kitty</title>
+  <meta name="description" content="Swipe right to like, left to pass. Built with the CATAAS API." />
+  <link rel="preconnect" href="https://cataas.com" crossorigin>
+  <style>
+    :root{
+      --bg:#0b0b10; --panel:#14141c; --muted:#9aa0a6; --text:#e6e6ea; --accent:#7dd3fc; --ok:#34d399; --no:#fb7185;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      background: radial-gradient(1200px 800px at 50% -10%, #1f2937 0%, #0b0b10 60%);
+      color:var(--text);
+      display:flex; flex-direction:column;
+    }
+    header{
+      padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    header .brand{ display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.2px; }
+    header .brand span{ opacity:.85 }
+    header .pill{ font-size:12px; color:var(--muted); background:#1f2330; border:1px solid #252a38; padding:6px 10px; border-radius:999px }
+
+    main{ flex:1; display:flex; flex-direction:column; gap:14px; padding:0 14px 16px; }
+
+    /* Card stack */
+    .stage{ position:relative; flex:1; max-width:520px; width:100%; margin:0 auto; display:grid; place-items:center; }
+    .card{
+      position:absolute; width:min(92vw,520px); aspect-ratio:3/4; border-radius:22px; overflow:hidden; background:#0f172a;
+      box-shadow:0 20px 60px rgba(0,0,0,.45); display:flex; align-items:end; justify-content:space-between; padding:12px; border:1px solid #1f2433;
+      touch-action:none; user-select:none; will-change:transform; transition:box-shadow .2s ease;
+    }
+    .card img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .card .info{ position:relative; z-index:2; width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .badge{ font-weight:700; padding:6px 10px; border-radius:999px; background:rgba(0,0,0,.45); backdrop-filter: blur(6px); border:1px solid rgba(255,255,255,.08); }
+    .like{ color:#022c22; background:rgba(16,185,129,.9); border-color:rgba(255,255,255,.25); transform:rotate(-6deg); }
+    .nope{ color:#3b0710; background:rgba(248,113,113,.9); border-color:rgba(255,255,255,.25); transform:rotate(6deg); }
+
+    .ghost{ pointer-events:none; }
+
+    /* Controls */
+    .controls{ display:flex; justify-content:center; gap:14px; margin:4px auto 0; }
+    button{
+      background:#171a24; color:var(--text); border:1px solid #23283a; padding:14px 18px; border-radius:14px; font-weight:600; cursor:pointer;
+      min-width:120px; transition:transform .08s ease, background .2s ease, border-color .2s ease;
+    }
+    button:hover{ background:#1c2130; border-color:#2b334a }
+    .btn-like{ background:rgba(16,185,129,.12); border-color:rgba(16,185,129,.35) }
+    .btn-like:hover{ background:rgba(16,185,129,.18) }
+    .btn-nope{ background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.35) }
+    .btn-nope:hover{ background:rgba(248,113,113,.18) }
+
+    /* Progress */
+    .progress{ height:6px; background:#1e2433; border-radius:999px; overflow:hidden; margin:0 auto; width:min(92vw,520px) }
+    .bar{ height:100%; width:0%; background:linear-gradient(90deg,var(--accent),#a78bfa); transition:width .25s ease }
+
+    /* Summary */
+    .summary{ max-width:980px; margin:24px auto; padding:0 14px; display:none }
+    .summary h2{ margin:0 0 10px }
+    .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px }
+    .grid img{ width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:14px; border:1px solid #1f2433 }
+
+    @media (min-width:700px){ header{ padding:18px 24px } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 3c-1.657 0-3 1.79-3 4v2H7a4 4 0 0 0-4 4 6 6 0 0 0 6 6h6a6 6 0 0 0 6-6 4 4 0 0 0-4-4h-2V7c0-2.21-1.343-4-3-4Z" stroke="#7dd3fc" stroke-width="1.2"/>
+      </svg>
+      <span>Paws & Preferences</span>
+    </div>
+    <div class="pill">Swipe right to like • left to pass</div>
+  </header>
+
+  <main>
+    <div class="stage" id="stage" aria-live="polite" aria-atomic="true"></div>
+    <div class="controls">
+      <button class="btn-nope" id="btnNo">👎 Dislike</button>
+      <button class="btn-like" id="btnYes">👍 Like</button>
+    </div>
+    <div class="progress"><div class="bar" id="bar"></div></div>
+
+    <section class="summary" id="summary">
+      <h2>Summary</h2>
+      <p id="resultText"></p>
+      <div class="grid" id="likesGrid"></div>
+    </section>
+  </main>
+
+  <script>
+    // --- Config ---
+    const COUNT = 16; // number of cats to fetch
+    const IMG_SIZE = 700; // px width for images (height will follow aspect)
+
+    // Build image URL from a CATAAS id
+    const imgFromId = (id) => `https://cataas.com/cat/${id}?width=${IMG_SIZE}`;
+
+    // Fetch IDs from CATAAS JSON API
+    async function fetchCats(count){
+      // Get a list of cats as JSON. Some deployments need the Accept header
+      const res = await fetch(`https://cataas.com/api/cats?limit=${count}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await res.json();
+      // Items sometimes present id as `_id`.
+      return data.map(x => ({ id: x.id || x._id, tags: x.tags || [] }));
+    }
+
+    // --- State ---
+    const state = { cats: [], index: 0, likes: [] };
+
+    const stage = document.getElementById('stage');
+    const bar = document.getElementById('bar');
+    const summaryEl = document.getElementById('summary');
+    const resultText = document.getElementById('resultText');
+    const likesGrid = document.getElementById('likesGrid');
+    const btnYes = document.getElementById('btnYes');
+    const btnNo = document.getElementById('btnNo');
+
+    // Render the next card on the stack
+    function renderStack(){
+      stage.innerHTML = '';
+      // render top 3 for smoothness
+      const next = state.cats.slice(state.index, state.index + 3);
+      next.forEach((cat, i) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.zIndex = 100 - i;
+        card.style.transform = `translateY(${i * 6}px) scale(${1 - i*0.02})`;
+        card.dataset.idx = state.index + i;
+
+        const img = document.createElement('img');
+        img.alt = 'Cute cat';
+        img.decoding = 'async';
+        img.loading = i ? 'lazy' : 'eager';
+        img.src = imgFromId(cat.id);
+
+        const info = document.createElement('div');
+        info.className = 'info';
+        const tagTxt = (cat.tags && cat.tags.length) ? `#${cat.tags[0]}` : '#cat';
+        info.innerHTML = `<span class="badge">${tagTxt}</span>`;
+
+        const likeBadge = document.createElement('span');
+        likeBadge.className = 'badge like'; likeBadge.textContent = 'LIKE'; likeBadge.style.opacity = 0;
+        const nopeBadge = document.createElement('span');
+        nopeBadge.className = 'badge nope'; nopeBadge.textContent = 'NOPE'; nopeBadge.style.opacity = 0;
+
+        card.appendChild(img);
+        card.appendChild(info);
+        card.appendChild(likeBadge);
+        card.appendChild(nopeBadge);
+
+        addSwipe(card, likeBadge, nopeBadge);
+        stage.appendChild(card);
+      });
+
+      updateProgress();
+      if(state.index >= state.cats.length){ showSummary(); }
+    }
+
+    function updateProgress(){
+      const p = Math.min(100, Math.round((state.index / state.cats.length) * 100));
+      bar.style.width = p + '%';
+    }
+
+    function showSummary(){
+      stage.classList.add('ghost');
+      summaryEl.style.display = 'block';
+      resultText.textContent = `You liked ${state.likes.length} of ${state.cats.length} cats.`;
+      likesGrid.innerHTML = '';
+      state.likes.forEach(id => {
+        const img = document.createElement('img');
+        img.src = imgFromId(id);
+        img.alt = 'Liked cat';
+        img.loading = 'lazy';
+        likesGrid.appendChild(img);
+      });
+    }
+
+    // Swipe interactions (touch + mouse)
+    function addSwipe(card, likeBadge, nopeBadge){
+      let startX = 0, startY = 0, dx = 0, dy = 0;
+      let dragging = false;
+
+      const onStart = (x, y) => { dragging = true; startX = x; startY = y; card.style.transition = 'none'; };
+      const onMove = (x, y) => {
+        if(!dragging) return;
+        dx = x - startX; dy = y - startY;
+        const rot = dx * 0.05;
+        card.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+        const likeAmt = Math.min(1, Math.max(0, dx / 120));
+        const nopeAmt = Math.min(1, Math.max(0, -dx / 120));
+        likeBadge.style.opacity = likeAmt; nopeBadge.style.opacity = nopeAmt;
+      };
+      const onEnd = () => {
+        if(!dragging) return; dragging = false;
+        const threshold = 120; // px
+        // Like
+        if(dx > threshold){
+          fling('right');
+        // Dislike
+        } else if(dx < -threshold){
+          fling('left');
+        } else {
+          // Reset
+          card.style.transition = 'transform .18s ease';
+          card.style.transform = '';
+          likeBadge.style.opacity = 0; nopeBadge.style.opacity = 0;
+        }
+      };
+
+      const fling = (dir) => {
+        const idx = Number(card.dataset.idx);
+        card.style.transition = 'transform .28s ease';
+        const offX = (dir === 'right') ? window.innerWidth : -window.innerWidth;
+        card.style.transform = `translate(${offX}px, ${dy}px) rotate(${dx * 0.05}deg)`;
+        likeBadge.style.opacity = dir === 'right' ? 1 : 0; nopeBadge.style.opacity = dir === 'left' ? 1 : 0;
+        setTimeout(() => {
+          if(dir === 'right'){ state.likes.push(state.cats[idx].id); }
+          state.index = idx + 1;
+          renderStack();
+        }, 220);
+      };
+
+      // Touch
+      card.addEventListener('touchstart', (e)=> onStart(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
+      card.addEventListener('touchmove',  (e)=> onMove(e.touches[0].clientX, e.touches[0].clientY), {passive:true});
+      card.addEventListener('touchend', onEnd);
+      // Mouse
+      card.addEventListener('mousedown', (e)=> onStart(e.clientX, e.clientY));
+      window.addEventListener('mousemove', (e)=> onMove(e.clientX, e.clientY));
+      window.addEventListener('mouseup', onEnd);
+    }
+
+    // Button fallbacks
+    btnYes.addEventListener('click', () => choose('right'));
+    btnNo.addEventListener('click', () => choose('left'));
+    function choose(dir){
+      const first = stage.querySelector('.card');
+      if(!first) return;
+      const likeBadge = first.querySelector('.like');
+      const nopeBadge = first.querySelector('.nope');
+      // simulate swipe
+      const dx = dir === 'right' ? window.innerWidth : -window.innerWidth;
+      first.style.transition = 'transform .28s ease';
+      first.style.transform = `translate(${dx}px, 0) rotate(${dx*0.05}deg)`;
+      likeBadge.style.opacity = dir === 'right' ? 1 : 0; nopeBadge.style.opacity = dir === 'left' ? 1 : 0;
+      const idx = Number(first.dataset.idx);
+      setTimeout(()=>{
+        if(dir === 'right'){ state.likes.push(state.cats[idx].id); }
+        state.index = idx + 1; renderStack();
+      }, 220);
+    }
+
+    // Init
+    (async function init(){
+      try{
+        const cats = await fetchCats(COUNT);
+        state.cats = cats;
+        renderStack();
+      }catch(err){
+        console.error(err);
+        stage.innerHTML = `<p style="max-width:520px;text-align:center">Couldn't fetch cats right now. Please refresh later.</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>
